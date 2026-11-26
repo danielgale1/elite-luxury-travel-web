@@ -1,5 +1,5 @@
 // Caches the app shell so it opens offline. Trip data is cached by the app itself.
-const CACHE = 'elt-shell-v4';
+const CACHE = 'elt-shell-v5';
 const SHELL = ['./', './index.html', './app.css', './app.js', './data.js', './config.js', './wxicons.js', './manifest.webmanifest', './icons/icon-192.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

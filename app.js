@@ -1,6 +1,6 @@
 import { BRAND, JOURNEYS } from './config.js';
 import { wxIcon, wxKind } from './wxicons.js';
-import { DEMO, getSession, sendCode, verifyCode, signOut, myTrips, safeLink, sb, myReview, submitReview, signInPassword, signUpPassword, verifySignupCode, resendSignupCode, sendResetCode, setNewPassword, deleteAccount, sampleTrip } from './data.js';
+import { DEMO, getSession, sendCode, verifyCode, signOut, myTrips, safeLink, sb, myReview, submitReview, signInPassword, signUpPassword, verifySignupCode, resendSignupCode, sendResetCode, setNewPassword, deleteAccount, sampleTrip, submitTripRequest, myRequests, demoPaid } from './data.js';
 
 const root = document.getElementById('app');
 // Image paths (the single-file preview swaps in embedded copies).
@@ -55,6 +55,9 @@ const ICON = {
   home: "<path d=\"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8\" /> <path d=\"M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\" />",
   flag: "<path d=\"M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z\" /> <line x1=\"4\" x2=\"4\" y1=\"22\" y2=\"15\" />",
   back: "<path d=\"m15 18-6-6 6-6\" />",
+  x: "<path d=\"M18 6 6 18\" /> <path d=\"m6 6 12 12\" />",
+  download: "<path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\" /> <polyline points=\"7 10 12 15 17 10\" /> <line x1=\"12\" x2=\"12\" y1=\"15\" y2=\"3\" />",
+  share: "<path d=\"M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8\" /> <polyline points=\"16 6 12 2 8 6\" /> <line x1=\"12\" x2=\"12\" y1=\"2\" y2=\"15\" />",
   text: "<path d=\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\" /> <path d=\"M13 8H7\" /> <path d=\"M17 12H7\" />"
 };
 
@@ -236,6 +239,7 @@ function signinLogo() {
   return box;
 }
 function authShell(title, intro, ...body) {
+  window.scrollTo(0, 0);
   root.replaceChildren(h('div', { class: 'signin2' },
     h('div', { class: 'signin-photo' },
       photo(BRAND.signinImage, 'Coastline at golden hour', 'fill'),
@@ -270,7 +274,8 @@ function passwordInput(id, label, autocomplete) {
 function statusLine() { return h('p', { class: 'note', role: 'status', 'aria-live': 'polite' }); }
 function setStatus(el, text, isError) { el.className = isError ? 'error' : 'note'; el.textContent = text; }
 function busy(btn, on, label) { btn.disabled = on; btn.textContent = label; }
-function enterApp() { tripsCache = null; location.hash = '#/'; route(); }
+let playIntro = false;
+function enterApp() { tripsCache = null; playIntro = true; location.hash = '#/'; route(); }
 const emailOk = v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
 function viewSignIn(msg, presetEmail) {
@@ -399,6 +404,10 @@ function viewTrip(t) {
   const stays = hotelStays(t);
   const state = tripState(t);
   const tours = days.flatMap((d, i) => (Array.isArray(d.schedule) ? d.schedule : []).filter(x => x && x.tour).map(x => ({ ...x, i })));
+  const others = pastTrips.filter(p => p.id !== t.id);
+  // A past trip opened from the home screen gets a way back home.
+  const backHome = state === 'after' && !viewingSample;
+  const proposal = t.status === 'proposal';
 
   render(
     h('main', { class: 'main flush' },
@@ -406,19 +415,21 @@ function viewTrip(t) {
         photo(t.cover_image, t.title || 'Your trip', 'fill'),
         h('div', { class: 'shade' }),
         h('img', { class: 'hero-mark', src: img('mark-gold'), alt: BRAND.name }),
+        backHome ? h('a', { class: 'round-back', href: '#/', 'aria-label': 'Back to home' }, svg(ICON.back)) : null,
         h('div', { class: 'hero-text' },
-          t.client_name ? h('p', { class: 'hero-hi' }, 'Hi ' + t.client_name) : null,
+          proposal ? h('p', { class: 'hero-hi' }, 'Your proposal') : t.client_name ? h('p', { class: 'hero-hi' }, 'Hi ' + t.client_name) : null,
           h('h1', { class: 'hero-title' }, t.title || 'Your trip'),
           t.dates_text ? h('p', { class: 'hero-meta' }, t.dates_text) : null,
-          cd ? h('span', { class: 'pill' }, cd) : null)),
+          proposal ? h('span', { class: 'pill' }, 'Ready to review') : cd ? h('span', { class: 'pill' }, cd) : null)),
       h('div', { class: 'pad' },
         days.length ? h('div', { class: 'stats' },
           h('div', { class: 'stat' }, h('strong', {}, String(days.length)), h('span', {}, 'Days')),
           h('div', { class: 'stat' }, h('strong', {}, String(Math.max(days.length - 1, 0))), h('span', {}, 'Nights')),
           h('div', { class: 'stat' }, h('strong', {}, String(cities.length)), h('span', {}, cities.length === 1 ? 'City' : 'Cities'))) : null,
 
-        state === 'during' ? todayCard(t, base) : null,
-        state === 'after' ? reviewCard(t, base) : null,
+        proposal ? proposalCard(t, base) : null,
+        !proposal && state === 'during' ? todayCard(t, base) : null,
+        !proposal && state === 'after' ? reviewCard(t, base) : null,
 
         (tours.length || stays.length) ? h('div', { class: 'quick' },
           tours.length ? h('button', { class: 'quick-btn', type: 'button', onclick: () => document.getElementById('sec-tours').scrollIntoView({ behavior: 'smooth', block: 'start' }) }, svg(ICON.ticket), h('span', {}, h('strong', {}, String(tours.length)), ' Tours')) : null,
@@ -482,9 +493,13 @@ function viewTrip(t) {
               h('span', { class: 'day-text' },
                 h('span', { class: 'day-title' }, st.name),
                 h('span', { class: 'muted', style: 'font-size:13px' }, [st.city, (a && b) ? fmtDay(a) + ' to ' + fmtDay(b) : '', n + (n === 1 ? ' night' : ' nights')].filter(Boolean).join(' · ')),
-                st.checkin ? h('span', { class: 'muted', style: 'font-size:13px' }, st.checkin) : null),
+                st.checkin ? h('span', { class: 'muted', style: 'font-size:13px' }, st.checkin) : null,
+                st.conf ? h('span', { class: 'muted', style: 'font-size:13px' }, 'Confirmation ' + st.conf) : null),
               map ? h('a', { class: 'inline-link', href: map, target: '_blank', rel: 'noopener noreferrer', 'aria-label': 'Open ' + st.name + ' in Maps' }, svg(ICON.pin)) : null);
           }))) : null,
+
+        others.length ? h('section', { class: 'block' },
+          h('h2', { class: 'section-title' }, 'Previous travels'), pastList(others)) : null,
 
         h('a', { class: 'next-card', href: base + '/plan' },
           h('span', { class: 'list-icon' }, svg(ICON.compass)),
@@ -503,7 +518,7 @@ function hotelStays(t) {
     if (!name || name === 'Home') return;
     const last = stays[stays.length - 1];
     if (last && last.name === name && last.end === i - 1) { last.end = i; return; }
-    stays.push({ name, city: (d.city || '').trim(), start: i, end: i, address: d.stay_address || '', checkin: d.checkin || '' });
+    stays.push({ name, city: (d.city || '').trim(), start: i, end: i, address: d.stay_address || '', checkin: d.checkin || '', conf: d.stay_conf || '' });
   });
   return stays;
 }
@@ -516,7 +531,7 @@ function journeyLink(slug) {
 
 function journeysGrid() {
   return h('div', { class: 'journeys' }, JOURNEYS.map(j =>
-    h('a', { class: 'journey', href: safeLink(j.url) || journeyLink('') || '#', target: '_blank', rel: 'noopener noreferrer' },
+    h('a', { class: 'journey', href: '#/journey/' + slugOf(j) },
       photo(j.image, j.title, 'fill'),
       h('div', { class: 'shade' }),
       h('span', { class: 'journey-text' }, h('span', {}, j.meta), h('strong', {}, j.title)))));
@@ -529,10 +544,10 @@ function viewPlan(t) {
       h('p', { class: 'eyebrow' }, 'Your next journey'),
       h('h1', { style: 'margin-top:10px' }, 'Where to next?'),
       h('p', { class: 'muted', style: 'margin-top:12px' }, 'Pick one of our curated journeys or tell us about a trip of your own. Your advisor takes it from there.'),
-      plan ? h('a', { class: 'btn', style: 'margin-top:24px', href: plan, target: '_blank', rel: 'noopener noreferrer' }, svg(ICON.compass), 'Plan a custom trip') : null,
+      h('a', { class: 'btn', style: 'margin-top:24px', href: '#/request' }, svg(ICON.compass), 'Plan a custom trip'),
       h('h2', { class: 'section-title', style: 'margin-top:34px' }, 'Curated journeys'),
       journeysGrid()),
-    nav(t.id, 'plan'));
+    t ? nav(t.id, 'plan') : navNoTrip('plan'));
 }
 
 
@@ -638,7 +653,7 @@ function viewReview(t) {
     btn, status);
   render(
     h('main', { class: 'main' },
-      t.title ? h('p', { class: 'eyebrow page-eyebrow' }, t.title) : null,
+      t && t.title ? h('p', { class: 'eyebrow page-eyebrow' }, t.title) : null,
       h('h1', {}, 'How was your trip?'),
       h('p', { class: 'muted', style: 'margin:12px 0 26px' }, 'Your review helps us plan even better journeys. It only takes a minute.'),
       form),
@@ -730,38 +745,93 @@ function contactButtons(subject) {
     h('a', { class: (wa || phone) ? 'btn ghost' : 'btn', href: 'mailto:' + BRAND.email + '?subject=' + encodeURIComponent(subject || 'Planning a trip') }, svg(ICON.mail), 'Email us'));
 }
 
-// Home for anyone without a trip yet: signed-in clients waiting for their itinerary, and guests exploring.
-function viewHome(guest) {
-  const plan = journeyLink('');
-  render(h('main', { class: 'main' },
-    h('img', { class: 'home-mark', src: img('mark-gold'), alt: BRAND.name }),
-    h('p', { class: 'eyebrow' }, guest ? BRAND.name : 'Welcome'),
-    h('h1', { style: 'margin-top:10px' }, guest ? 'Travel, beautifully arranged.' : 'Your journey starts here.'),
-    guest
-      ? h('p', { class: 'muted', style: 'margin-top:12px' }, 'Private journeys planned around you. Explore our curated journeys, see how your trip looks in the app, or talk to an advisor.')
-      : h('div', { class: 'home-status' },
-          svg(ICON.clock),
-          h('span', {}, h('strong', {}, 'Waiting for your itinerary?'), h('span', {}, 'When your advisor finishes your trip, it appears right here. Until then, have a look around.'))),
-    h('a', { class: 'sample-card', href: '#/trip/sample' },
-      photo(JOURNEYS[0] && JOURNEYS[0].image, 'Sample trip', 'fill'),
-      h('div', { class: 'shade' }),
-      h('span', { class: 'sample-card-text' },
-        h('span', {}, 'Sample trip · Italy'),
-        h('strong', {}, 'See how your trip will look'),
-        h('span', { class: 'sample-go' }, 'Open the sample', svg(ICON.chev)))),
-    h('h2', { class: 'section-title', style: 'margin-top:34px' }, 'Curated journeys'),
-    journeysGrid(),
-    plan ? h('a', { class: 'btn', style: 'margin-top:20px', href: plan, target: '_blank', rel: 'noopener noreferrer' }, svg(ICON.compass), 'Plan a custom trip') : null,
-    h('h2', { class: 'section-title', style: 'margin-top:36px' }, 'Talk to an advisor'),
-    BRAND.advisor ? h('div', { class: 'advisor', style: 'margin:0 0 16px' },
-      h('span', { class: 'advisor-mark' }, h('img', { src: img('mark-gold'), alt: '' })),
-      h('span', { class: 'day-text' }, h('span', { class: 'muted', style: 'font-size:12px' }, 'Your travel advisor'), h('span', { class: 'day-title' }, BRAND.advisor), h('span', { class: 'muted', style: 'font-size:13px' }, BRAND.name))) : null,
-    contactButtons(),
-    guest
-      ? h('div', { class: 'account-foot', style: 'margin-top:40px' },
-          h('a', { class: 'btn ghost', href: '#/' }, 'Sign in or create your account'),
-          h('div', { class: 'account-links' }, BRAND.privacyUrl ? h('a', { href: BRAND.privacyUrl, target: '_blank', rel: 'noopener noreferrer' }, 'Privacy policy') : null))
-      : accountFooter(40)));
+// Home when there is no upcoming trip: same look as the trip screen, with an empty itinerary,
+// Book now, and the client's previous travels.
+let guestMode = false;  // browsing without an account (Explore first)
+function navNoTrip(current) {
+  const item = (href, icon, label, key) => h('a', { href, 'aria-current': current === key ? 'page' : null }, svg(ICON[icon]), label);
+  return h('nav', { class: 'nav', 'aria-label': 'Main' },
+    h('div', { class: 'nav-inner' },
+      item(guestMode ? '#/explore' : '#/', 'cal', 'Itinerary', 'itin'),
+      item('#/home/info', 'info', 'Travel info', 'info'),
+      item('#/home/pay', 'card', 'Pay', 'pay'),
+      item('#/home/plan', 'compass', 'New trip', 'plan'),
+      item('#/home/contact', 'chat', 'Contact', 'contact')));
+}
+const callLink = () => safeLink(BRAND.callUrl || '');
+function bookButtons(primaryLabel) {
+  const plan = journeyLink(''), call = callLink();
+  return h('div', { class: 'stack', style: 'margin-top:16px' },
+    h('a', { class: 'btn', href: '#/request' }, svg(ICON.compass), primaryLabel || 'Book now'),
+    call ? h('a', { class: 'btn ghost', href: call, target: '_blank', rel: 'noopener noreferrer' }, svg(ICON.cal), 'Book a call') : null);
+}
+function pastList(past) {
+  return h('div', { class: 'stack' }, past.map(t =>
+    h('a', { class: 'past-card', href: '#/trip/' + encodeURIComponent(t.id) },
+      photo(t.cover_image, t.title || 'Trip', 'past-ph'),
+      h('span', { class: 'day-text' },
+        h('span', { class: 'day-date' }, t.dates_text || ''),
+        h('span', { class: 'day-title' }, t.title || 'Your trip'),
+        h('span', { class: 'past-tag' }, svg(ICON.check), 'Completed')),
+      h('span', { class: 'day-go' }, svg(ICON.chev)))));
+}
+function viewNoTrip(past, guest) {
+  navTrip = null;
+  const req = !guest && requestsCache[0];
+  render(
+    h('main', { class: 'main flush' },
+      h('header', { class: 'hero' },
+        photo((JOURNEYS[0] && JOURNEYS[0].image) || BRAND.signinImage, 'Your next journey', 'fill'),
+        h('div', { class: 'shade' }),
+        h('img', { class: 'hero-mark', src: img('mark-gold'), alt: BRAND.name }),
+        h('div', { class: 'hero-text' },
+          h('p', { class: 'hero-hi' }, guest ? 'Welcome to ' + BRAND.name : (past.length ? 'Welcome back' : 'Welcome')),
+          h('h1', { class: 'hero-title' }, req ? 'Your trip is in the works' : 'No upcoming trip'),
+          h('p', { class: 'hero-meta' }, req ? 'Jordan is preparing your proposal' : 'Your next journey starts here'),
+          req ? h('span', { class: 'pill' }, 'Request received') : h('a', { class: 'pill pill-cta', href: '#/request' }, 'Book now'))),
+      h('div', { class: 'pad' },
+        h('div', { class: 'stats' },
+          h('div', { class: 'stat' }, h('strong', {}, '0'), h('span', {}, 'Upcoming')),
+          h('div', { class: 'stat' }, h('strong', {}, String(past.length)), h('span', {}, past.length === 1 ? 'Past trip' : 'Past trips')),
+          h('div', { class: 'stat' }, h('strong', {}, String(JOURNEYS.length)), h('span', {}, 'Journeys'))),
+
+        h('section', { class: 'block' },
+          h('h2', { class: 'section-title' }, 'Your itinerary'),
+          req ? requestCard(req) : h('div', { class: 'empty-card' },
+            h('span', { class: 'list-icon' }, svg(ICON.cal)),
+            h('strong', {}, 'No itinerary yet'),
+            h('span', {}, 'Once you book, your day-by-day plan, hotels and flights will appear right here.'),
+            bookButtons('Book now'),
+            h('a', { class: 'empty-link', href: '#/trip/sample' }, 'See a sample itinerary', svg(ICON.chev)))),
+
+        h('section', { class: 'block' },
+          h('h2', { class: 'section-title' }, 'Previous travels'),
+          past.length ? pastList(past)
+            : h('p', { class: 'muted' }, 'Trips you take with us are kept here, with your itinerary, photos and review.')),
+
+        h('section', { class: 'block' },
+          h('h2', { class: 'section-title' }, 'Explore journeys'),
+          h('div', { class: 'places' }, JOURNEYS.map(j =>
+            h('a', { class: 'place', href: '#/journey/' + slugOf(j) },
+              photo(j.image, j.title, 'fill'),
+              h('div', { class: 'shade' }),
+              h('span', { class: 'place-text' }, h('strong', {}, j.title), h('span', {}, j.meta)))))),
+
+        accountFooter(40))),
+    navNoTrip('itin'));
+}
+function viewNoTripTab(kind) {
+  const info = kind === 'info';
+  render(
+    h('main', { class: 'main' },
+      h('h1', {}, info ? 'Travel info' : 'Payments'),
+      h('div', { class: 'empty-card', style: 'margin-top:22px' },
+        h('span', { class: 'list-icon' }, svg(ICON[info ? 'plane' : 'card'])),
+        h('strong', {}, 'Nothing here yet'),
+        h('span', {}, info ? 'Your flights, travel documents and the weather for each stop appear here once your trip is booked.'
+                           : 'Your payment schedule and secure payment link appear here once you book. We never ask for card details in the app.'),
+        bookButtons('Book now'))),
+    navNoTrip(kind));
 }
 
 // ---------- Travel info: flights, documents, weather ----------
@@ -818,7 +888,8 @@ function section(title, ...kids) {
 
 function viewInfo(t) {
   const flights = Array.isArray(t.flights) ? t.flights : [];
-  const docs = (Array.isArray(t.documents) ? t.documents : []).filter(d => safeLink(d.url));
+  const docs = docsList(t, '#/trip/' + encodeURIComponent(t.id));
+  saveOffline((Array.isArray(t.documents) ? t.documents : []).map(d => safeLink(d.url || '')).filter(Boolean));
   const cities = [...new Set((t.days || []).map(d => (d.city || '').trim()).filter(Boolean))];
   const wxCard = h('div', { class: 'wx-card' }, h('p', { class: 'muted' }, 'Loading weather…'));
   let wxCity = cities[0];
@@ -840,22 +911,22 @@ function viewInfo(t) {
               h('span', { class: 'flight-end right' }, h('strong', {}, code(f.to) || city(f.to) || '—'), h('span', {}, city(f.to)))),
             h('div', { class: 'flight-meta' },
               h('span', {}, [f.flight, f.when].filter(Boolean).join(' · ')),
-              f.flight ? h('a', { class: 'inline-link', href: 'https://www.google.com/search?q=' + encodeURIComponent(f.flight + ' flight status'), target: '_blank', rel: 'noopener noreferrer' }, 'Status') : null));
+              f.flight ? h('a', { class: 'inline-link', href: 'https://www.google.com/search?q=' + encodeURIComponent(f.flight + ' flight status'), target: '_blank', rel: 'noopener noreferrer' }, 'Status') : null),
+            f.ref || safeLink(f.checkin || '') ? h('div', { class: 'flight-ref' },
+              f.ref ? h('span', {}, 'Booking code ', h('strong', {}, f.ref)) : null,
+              safeLink(f.checkin || '') ? h('a', { class: 'inline-link', href: safeLink(f.checkin), target: '_blank', rel: 'noopener noreferrer' }, 'Check in') : null) : null);
         }))
-          : h('p', { class: 'muted' }, 'Your flight details will appear here once booked.')),
-      section('Documents',
-        docs.length ? h('div', { class: 'list-card' }, docs.map(d =>
-          h('a', { class: 'list-item', href: safeLink(d.url), target: '_blank', rel: 'noopener noreferrer' },
-            h('span', { class: 'list-icon' }, svg(ICON.doc)),
-            h('span', { class: 'day-title', style: 'flex:1' }, d.name || 'Document'),
-            h('span', { class: 'chev' }, svg(ICON.chev)))))
-          : h('p', { class: 'muted' }, 'Confirmations and tickets will appear here as each part is booked.')),
-      section('Weather this week', ...(cities.length ? [cities.length > 1 ? wxChips : null, wxCard] : [h('p', { class: 'muted' }, 'Weather will appear once your itinerary is ready.')]))),
+          : h('p', { class: 'muted' }, 'Your flight details will appear here once booked.'),
+        flights.length ? h('p', { class: 'muted small', style: 'margin-top:12px' }, 'Online check-in opens 24 hours before each flight. At the airport you only need your passport.') : null),
+      section('Tickets & documents',
+        docs.length ? h('div', { class: 'list-card' }, docs)
+          : h('p', { class: 'muted' }, 'Tickets, vouchers and confirmations will appear here as each part is booked.')),
+      tripState(t) === 'after' ? null : section('Weather this week', ...(cities.length ? [cities.length > 1 ? wxChips : null, wxCard] : [h('p', { class: 'muted' }, 'Weather will appear once your itinerary is ready.')]))),
     nav(t.id, 'info'));
-  if (wxCity) loadWeather(wxCity, wxCard);
+  if (wxCity && tripState(t) !== 'after') loadWeather(wxCity, wxCard);
 }
 
-function viewPay(t) {
+function viewPayLink(t) {
   const link = safeLink(t.pay_link || '');
   render(
     h('main', { class: 'main' },
@@ -871,8 +942,8 @@ function viewPay(t) {
             h('span', { class: 'note' }, 'Secure checkout. We never see your card details.'))
         : h('div', { class: 'paycard' },
             h('span', { class: 'list-icon big' }, svg(ICON.lock)),
-            h('span', { class: 'amount', style: 'font-size:30px' }, 'Nothing to pay yet'),
-            h('span', { class: 'muted' }, 'When it’s time to book, your secure payment link will appear here.')),
+            h('span', { class: 'amount', style: 'font-size:30px' }, tripState(t) === 'after' ? 'All settled' : 'Nothing to pay yet'),
+            h('span', { class: 'muted' }, tripState(t) === 'after' ? 'There’s nothing left to pay for this trip.' : 'When it’s time to book, your secure payment link will appear here.')),
       h('div', { class: 'stack', style: 'margin-top:28px;gap:8px' },
         h('strong', { style: 'font-size:14px' }, 'Paid so far'),
         h('span', { class: 'muted' }, t.paid_note || 'No payments yet.'))),
@@ -884,7 +955,7 @@ function viewContact(t) {
   const wa = (BRAND.whatsapp || '').replace(/\D/g, '');
   render(
     h('main', { class: 'main' },
-      t.title ? h('p', { class: 'eyebrow page-eyebrow' }, t.title) : null,
+      t && t.title ? h('p', { class: 'eyebrow page-eyebrow' }, t.title) : null,
       h('h1', {}, 'We’re here for you'),
       h('p', { class: 'muted', style: 'margin-top:12px' }, 'Questions before you go, or help while you travel. Reach your Elite team any time.'),
       BRAND.advisor ? h('div', { class: 'advisor' },
@@ -894,15 +965,18 @@ function viewContact(t) {
         wa ? h('a', { class: 'btn', href: 'https://wa.me/' + wa, target: '_blank', rel: 'noopener noreferrer' }, svg(ICON.chat), 'WhatsApp us') : null,
         phone ? h('a', { class: wa ? 'btn ghost' : 'btn', href: 'tel:' + phone }, svg(ICON.phone), 'Call ' + (BRAND.advisor ? BRAND.advisor.split(' ')[0] : 'us')) : null,
         phone ? h('a', { class: 'btn ghost', href: 'sms:' + phone }, svg(ICON.chat), 'Text us') : null,
-        h('a', { class: (wa || phone) ? 'btn ghost' : 'btn', href: 'mailto:' + BRAND.email + '?subject=' + encodeURIComponent(t.title || 'My trip') }, svg(ICON.mail), 'Email us')),
+        h('a', { class: (wa || phone) ? 'btn ghost' : 'btn', href: 'mailto:' + BRAND.email + '?subject=' + encodeURIComponent((t && t.title) || 'My trip') }, svg(ICON.mail), 'Email us')),
       h('p', { class: 'note', style: 'margin-top:16px' }, [BRAND.phoneDisplay || prettyPhone(phone), BRAND.email].filter(Boolean).join('  ·  ')),
       accountFooter(48)),
-    nav(t.id, 'contact'));
+    t ? nav(t.id, 'contact') : navNoTrip('contact'));
 }
 
 // Sign out, privacy policy and delete account: shown at the bottom of the main screens.
 function accountFooter(top = 40) {
   if (viewingSample) return null;
+  if (guestMode) return h('div', { class: 'account-foot', style: 'margin-top:' + top + 'px' },
+    h('a', { class: 'btn ghost', href: '#/' }, 'Sign in or create your account'),
+    h('div', { class: 'account-links' }, BRAND.privacyUrl ? h('a', { href: BRAND.privacyUrl, target: '_blank', rel: 'noopener noreferrer' }, 'Privacy policy') : null));
   return h('div', { class: 'account-foot', style: 'margin-top:' + top + 'px' },
     h('button', { class: 'btn ghost', type: 'button', onclick: doSignOut }, 'Sign out'),
     h('div', { class: 'account-links' },
@@ -918,7 +992,7 @@ function viewDeleteAccount() {
     const r = await deleteAccount();
     if (!r.ok) { btn.disabled = false; btn.textContent = 'Delete my account'; msg.textContent = 'We couldn’t delete your account. Please try again or email ' + BRAND.email + '.'; return; }
     tripsCache = null;
-    location.hash = '';
+    history.replaceState(null, '', location.pathname + location.search);
     render(h('main', { class: 'main' },
       h('h1', {}, 'Your account is deleted'),
       h('p', { class: 'muted', style: 'margin-top:14px' }, 'Your login, reviews and photos have been removed. Thank you for travelling with us.'),
@@ -939,18 +1013,354 @@ async function doSignOut() {
   viewSignIn();
 }
 
-// ---------- Router ----------
-let tripsCache = null;
-let tripsLoading = null;
-function sampleRoute(parts) {
-  const t = sampleTrip();
-  if (parts[2] === 'day') return viewDay(t, parseInt(parts[3], 10) || 1);
+
+// ---------- Book and pay in the app ----------
+// Journeys open inside the app, clients send a trip request, Jordan's proposal appears in the app,
+// and payments open a secure checkout (Fora or Stripe) inside the app. The app never handles card numbers.
+const slugOf = j => (j.url || '').split('/').pop() || '';
+const journeyBySlug = s => JOURNEYS.find(j => slugOf(j) === s);
+let navTrip = null;        // trip whose tabs show at the bottom (null = the no-trip tabs)
+const navFor = key => navTrip ? nav(navTrip, key) : navNoTrip(key);
+let requestsCache = [];
+let sessionEmail = '';
+let lastRequestEmail = '';
+
+// Opens an outside page (secure checkout, call calendar, PDF) inside the app where possible.
+function openInApp(url) {
+  const B = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser;
+  if (B) { B.open({ url, presentationStyle: 'popover' }); return; }
+  window.open(url, '_blank', 'noopener');
+}
+
+function viewJourney(slug) {
+  const j = journeyBySlug(slug);
+  if (!j) { location.hash = '#/home/plan'; return; }
+  const call = callLink();
+  const steps = [['Send a request', 'Tell us your dates, who’s travelling and what you love.'],
+    ['Get your proposal', 'Jordan tailors the route, hotels and experiences, and sends it here.'],
+    ['Accept and pay securely', 'Pay your deposit in the app. We never see your card.'],
+    ['Travel with everything in one place', 'Itinerary, tickets, receipts and your advisor, all in the app.']];
+  render(
+    h('main', { class: 'main flush' },
+      h('header', { class: 'hero' },
+        photo(j.image, j.title, 'fill'),
+        h('div', { class: 'shade' }),
+        h('a', { class: 'round-back', href: '#/home/plan', 'aria-label': 'Back', onclick: (e) => { if (history.length > 1) { e.preventDefault(); history.back(); } } }, svg(ICON.back)),
+        h('div', { class: 'hero-text' },
+          h('p', { class: 'hero-hi' }, j.meta),
+          h('h1', { class: 'hero-title' }, j.title),
+          j.from ? h('span', { class: 'pill' }, j.from) : null)),
+      h('div', { class: 'pad' },
+        h('p', { class: 'muted', style: 'margin-top:24px' }, 'A private journey, shaped entirely around you. Every hotel, guide and transfer is chosen by your advisor and can be changed to suit your pace, dates and budget.'),
+        h('section', { class: 'block' },
+          h('h2', { class: 'section-title' }, 'How booking works'),
+          h('ol', { class: 'steps' }, steps.map(([a, b]) => h('li', {}, h('strong', {}, a), h('span', {}, b))))),
+        h('div', { class: 'stack', style: 'margin-top:26px' },
+          h('a', { class: 'btn', href: '#/request/' + slug }, svg(ICON.compass), 'Request this journey'),
+          call ? h('a', { class: 'btn ghost', href: call, target: '_blank', rel: 'noopener noreferrer' }, svg(ICON.cal), 'Book a call first')
+            : null,
+          safeLink(j.url) ? h('a', { class: 'empty-link', href: j.url, target: '_blank', rel: 'noopener noreferrer' }, 'Full day-by-day on our website', svg(ICON.chev)) : null))),
+    navFor('plan'));
+}
+
+function field(id, label, el) { return h('div', { class: 'stack', style: 'gap:8px' }, h('label', { for: id }, label), el); }
+
+function viewRequest(slug) {
+  const j = slug ? journeyBySlug(slug) : null;
+  const sel = h('select', { id: 'rq-journey' }, h('option', { value: '' }, 'A custom trip'),
+    ...JOURNEYS.map(x => h('option', { value: slugOf(x), selected: j === x ? true : null }, x.title)));
+  const where = h('input', { id: 'rq-where', type: 'text', maxlength: '200', placeholder: 'Countries, cities, or “surprise me”' });
+  const whereWrap = field('rq-where', 'Where would you like to go?', where);
+  const syncWhere = () => { whereWrap.style.display = sel.value ? 'none' : ''; };
+  sel.onchange = syncWhere; syncWhere();
+  const when = h('input', { id: 'rq-when', type: 'text', maxlength: '120', placeholder: 'e.g. May 2027, about 10 nights' });
+  const adults = h('input', { id: 'rq-adults', type: 'number', min: '1', max: '20', value: '2', inputmode: 'numeric' });
+  const kids = h('input', { id: 'rq-kids', type: 'number', min: '0', max: '20', value: '0', inputmode: 'numeric' });
+  const budget = h('select', { id: 'rq-budget' }, ...['Not sure yet', 'Under $5,000', '$5,000 to $10,000', '$10,000 to $20,000', '$20,000 and up'].map(v => h('option', {}, v)));
+  const occasion = h('select', { id: 'rq-occ' }, ...['No special occasion', 'Honeymoon', 'Anniversary', 'Birthday', 'Family trip', 'Something else'].map(v => h('option', {}, v)));
+  const notes = h('textarea', { id: 'rq-notes', maxlength: '2000', placeholder: 'Hotels you love, must-sees, pace, dietary needs…' });
+  const name = input('rq-name', 'Your name', 'text', { autocomplete: 'name', maxlength: '120' });
+  const email = input('rq-email', 'Email', 'email', { autocomplete: 'email', value: sessionEmail || '' });
+  const phone = input('rq-phone', 'Phone or WhatsApp (optional)', 'tel', { autocomplete: 'tel', required: null, maxlength: '40' });
+  let via = 'WhatsApp';
+  const viaBox = h('div', { class: 'chips', role: 'radiogroup', 'aria-label': 'Best way to reach you' });
+  const drawVia = () => viaBox.replaceChildren(...['WhatsApp', 'Call', 'Email'].map(v =>
+    h('button', { type: 'button', class: 'chip', role: 'radio', 'aria-checked': v === via ? 'true' : 'false', 'aria-selected': v === via ? 'true' : 'false', onclick: () => { via = v; drawVia(); } }, v)));
+  drawVia();
+  const status = statusLine();
+  const btn = h('button', { class: 'btn', type: 'submit' }, 'Send request');
+  const form = h('form', { class: 'stack', style: 'gap:20px;margin-top:24px', novalidate: true, onsubmit: async (e) => {
+    e.preventDefault();
+    const em = email.el.value.trim();
+    if (!sel.value && !where.value.trim()) { setStatus(status, 'Tell us where you’d like to go, or pick one of our journeys.', true); return; }
+    if (!name.el.value.trim()) { setStatus(status, 'Please add your name.', true); return; }
+    if (!emailOk(em)) { setStatus(status, 'Please enter a valid email so Jordan can send your proposal.', true); return; }
+    busy(btn, true, 'Sending…');
+    const jj = sel.value ? journeyBySlug(sel.value) : null;
+    const r = await submitTripRequest({
+      journey: jj ? jj.title : 'Custom trip', destination: where.value.trim(), dates: when.value.trim(),
+      adults: Math.max(1, parseInt(adults.value, 10) || 1), children: Math.max(0, parseInt(kids.value, 10) || 0),
+      budget: budget.value, occasion: occasion.value, notes: notes.value.trim(),
+      name: name.el.value.trim(), email: em, phone: phone.el.value.trim(), contact_via: via });
+    if (!r.ok) { busy(btn, false, 'Send request'); setStatus(status, 'We couldn’t send your request. Please check your connection and try again.', true); return; }
+    lastRequestEmail = em; tripsCache = null;
+    location.hash = '#/request/sent';
+  } },
+    field('rq-journey', 'Journey', sel), whereWrap,
+    field('rq-when', 'When would you like to travel?', when),
+    h('div', { class: 'row2' }, field('rq-adults', 'Adults', adults), field('rq-kids', 'Children', kids)),
+    field('rq-budget', 'Budget per person', budget),
+    field('rq-occ', 'Celebrating anything?', occasion),
+    field('rq-notes', 'Anything else we should know?', notes),
+    h('h2', { class: 'section-title', style: 'margin-top:8px' }, 'Your details'),
+    name, email, phone,
+    h('div', { class: 'stack', style: 'gap:8px' }, h('span', { class: 'field-label' }, 'Best way to reach you'), viaBox),
+    btn, status,
+    h('p', { class: 'note' }, 'No payment now. Jordan replies with a proposal you can review, accept and pay for right here in the app.'));
+  render(h('main', { class: 'main' },
+    h('p', { class: 'eyebrow' }, j ? j.meta : 'Your next journey'),
+    h('h1', { style: 'margin-top:10px' }, j ? j.title : 'Plan a custom trip'),
+    h('p', { class: 'muted', style: 'margin-top:12px' }, 'Tell us a little about your trip. It only takes a minute.'),
+    form), navFor('plan'));
+}
+
+function viewRequestSent() {
+  render(h('main', { class: 'main' },
+    h('span', { class: 'list-icon big' }, svg(ICON.check)),
+    h('h1', { style: 'margin-top:16px' }, 'Request sent'),
+    h('p', { class: 'muted', style: 'margin-top:12px' }, 'Thank you! Jordan will be in touch with ideas and a proposal. When it’s ready, it appears right here in the app, where you can accept it and pay securely.'),
+    h('div', { class: 'stack', style: 'margin-top:26px' },
+      guestMode ? h('button', { class: 'btn', type: 'button', onclick: () => viewSignUp(lastRequestEmail) }, 'Create an account to follow it')
+        : h('a', { class: 'btn', href: '#/' }, 'Back to home'),
+      h('a', { class: 'btn ghost', href: '#/home/contact' }, svg(ICON.chat), 'Message Jordan'))),
+    navFor('plan'));
+}
+
+function requestCard(r) {
+  const who = [r.adults ? r.adults + (r.adults == 1 ? ' adult' : ' adults') : '', r.children ? r.children + (r.children == 1 ? ' child' : ' children') : ''].filter(Boolean).join(', ');
+  const bits = [r.dates, who].filter(Boolean).join(' · ');
+  return h('div', { class: 'empty-card request-card' },
+    h('span', { class: 'list-icon' }, svg(ICON.clock)),
+    h('span', { class: 'req-tag' }, 'Request received'),
+    h('strong', {}, r.journey === 'Custom trip' && r.destination ? r.destination : r.journey),
+    bits ? h('span', {}, bits) : null,
+    h('span', {}, 'Jordan is preparing your proposal. It will appear right here as soon as it’s ready.'),
+    h('div', { class: 'stack', style: 'margin-top:16px' },
+      h('a', { class: 'btn ghost', href: '#/home/contact' }, svg(ICON.chat), 'Message Jordan')),
+    h('a', { class: 'empty-link', href: '#/request' }, 'Send another request', svg(ICON.chev)));
+}
+
+function proposalCard(t, base) {
+  const p = t.proposal || {};
+  const pays = Array.isArray(t.payments) ? t.payments : [];
+  const i = pays.findIndex(x => x.status !== 'paid');
+  const pay = i >= 0 ? pays[i] : null;
+  return h('section', { class: 'proposal-card' },
+    h('p', { class: 'eyebrow' }, 'Your proposal'),
+    h('div', { class: 'prop-price' },
+      t.price_total ? h('span', { class: 'amount' }, t.price_total) : null,
+      p.price_note ? h('span', { class: 'muted small' }, p.price_note) : null),
+    Array.isArray(p.includes) && p.includes.length ? h('ul', { class: 'prop-list' }, p.includes.map(x => h('li', {}, svg(ICON.check), h('span', {}, x)))) : null,
+    pay ? h('div', { class: 'prop-due' }, h('span', {}, 'To confirm, ' + pay.label.toLowerCase()), h('strong', {}, pay.amount)) : null,
+    p.valid_until ? h('p', { class: 'muted small', style: 'margin:0' }, 'Held for you until ' + p.valid_until) : null,
+    h('div', { class: 'stack' },
+      pay ? h('button', { class: 'btn', type: 'button', onclick: () => openCheckout(t, i) }, svg(ICON.lock), 'Accept & pay ' + pay.amount) : null,
+      h('a', { class: 'btn ghost', href: base + '/contact' }, svg(ICON.chat), 'Ask Jordan a question')),
+    h('p', { class: 'note', style: 'margin:0' }, 'Payment opens a secure checkout inside the app. We never see or store your card details.'));
+}
+
+// The secure payment page. In the live app the provider's checkout opens inside the app.
+// The preview shows where it opens; no card fields are ever part of this app.
+function openCheckout(t, i) {
+  const p = (t.payments || [])[i];
+  if (!p) return;
+  const link = safeLink(p.pay_link || '');
+  if (!DEMO && link) { openInApp(link); return; }
+  const live = !DEMO;  // live app without a payment link yet: explain instead of a checkout
+  const close = () => { wrap.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  const x = h('button', { type: 'button', class: 'sheet-x', 'aria-label': 'Close', onclick: close }, svg(ICON.x));
+  const wrap = h('div', { class: 'sheet-wrap', onclick: e => { if (e.target === wrap) close(); } },
+    h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Secure checkout' },
+      h('div', { class: 'sheet-head' }, h('span', {}, svg(ICON.lock), 'Secure checkout'), x),
+      h('div', { class: 'stack', style: 'gap:6px' },
+        h('span', { class: 'muted small' }, (t.title || 'Your trip') + ' · ' + p.label),
+        h('span', { class: 'amount' }, p.amount)),
+      live ? h('div', { class: 'sheet-frame' }, svg(ICON.clock),
+          h('strong', {}, 'Your secure payment link is on its way'),
+          h('span', {}, 'Jordan will set up this payment with you. Message him and he’ll take it from there. We never ask for card details in the app.'))
+        : h('div', { class: 'sheet-frame' }, svg(ICON.card),
+          h('strong', {}, 'The secure payment page opens here'),
+          h('span', {}, 'In the live app, Fora’s or Stripe’s checkout loads in this window. The client pays without leaving the app, and we never see the card.')),
+      live ? h('a', { class: 'btn', href: '#/trip/' + encodeURIComponent(t.id) + '/contact', onclick: () => close() }, svg(ICON.chat), 'Message Jordan')
+        : t.sample ? h('p', { class: 'note' }, 'This is a sample trip, so there’s nothing to pay.')
+        : h('button', { class: 'btn', type: 'button', onclick: () => { demoPaid(t.id, i); close(); tripsCache = null; location.hash = '#/trip/' + encodeURIComponent(t.id) + '/pay/paid'; } }, 'Preview: simulate a successful payment'),
+      h('button', { class: 'btn ghost', type: 'button', onclick: close }, 'Cancel')));
+  document.body.appendChild(wrap);
+  document.addEventListener('keydown', onKey);
+  x.focus();
+}
+
+const money = n => '$' + n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+const num = s => parseFloat(String(s || '').replace(/[^0-9.]/g, '')) || 0;
+
+function viewPay(t, justPaid) {
+  const pays = Array.isArray(t.payments) ? t.payments : [];
+  if (!pays.length) return viewPayLink(t);
+  const base = '#/trip/' + encodeURIComponent(t.id);
+  const proposal = t.status === 'proposal';
+  const nextI = pays.findIndex(p => p.status !== 'paid');
+  const next = nextI >= 0 ? pays[nextI] : null;
+  const paid = pays.filter(p => p.status === 'paid').reduce((n, p) => n + num(p.amount), 0);
+  const total = num(t.price_total) || pays.reduce((n, p) => n + num(p.amount), 0);
+  const stat = (label, v) => h('div', {}, h('strong', {}, v), h('span', {}, label));
+  const files = [
+    ...pays.map((p, i) => p.status === 'paid' && (p.receipt || safeLink(p.receipt_url || '')) ? { name: p.label + ' receipt', when: p.when, href: base + '/receipt/' + i } : null).filter(Boolean),
+    ...(Array.isArray(t.invoices) ? t.invoices : []).map((d, i) => ({ name: d.name || 'Invoice', when: d.when, href: base + '/invoice/' + i }))];
+  render(
+    h('main', { class: 'main' },
+      t.title ? h('p', { class: 'eyebrow page-eyebrow' }, t.title) : null,
+      h('h1', {}, proposal ? 'Your proposal' : 'Payments'),
+      justPaid ? h('div', { class: 'paid-banner', role: 'status' }, svg(ICON.check), h('span', {}, h('strong', {}, 'Payment received. '), 'Thank you! Your receipt is saved below.')) : null,
+      proposal ? proposalCard(t, base) : null,
+      !proposal && total ? h('div', { class: 'pay-summary' }, stat('Trip total', money(total)), stat('Paid', money(paid)), stat('Balance', money(Math.max(total - paid, 0)))) : null,
+      proposal ? null : next
+        ? h('div', { class: 'paycard' },
+            h('div', { class: 'stack', style: 'gap:6px' },
+              h('span', { class: 'muted small' }, 'Next payment · ' + next.label),
+              h('span', { class: 'amount' }, next.amount),
+              next.when ? h('span', { class: 'muted small' }, next.when) : null),
+            h('button', { class: 'btn', type: 'button', onclick: () => openCheckout(t, nextI) }, svg(ICON.lock), 'Pay securely'),
+            h('span', { class: 'note' }, 'Opens a secure checkout inside the app. We never see your card details.'))
+        : h('div', { class: 'paycard' },
+            h('span', { class: 'list-icon big' }, svg(ICON.check)),
+            h('span', { class: 'amount', style: 'font-size:30px' }, 'All paid'),
+            h('span', { class: 'muted' }, 'Thank you! There’s nothing left to pay for this trip.')),
+      section('Payment schedule', h('div', { class: 'list-card' }, pays.map((p, i) => h('div', { class: 'list-item' },
+        h('span', { class: 'list-icon' + (p.status === 'paid' ? ' ok' : '') }, svg(p.status === 'paid' ? ICON.check : ICON.clock)),
+        h('span', { class: 'day-text' }, h('span', { class: 'day-title' }, p.label + ' · ' + p.amount), p.when ? h('span', { class: 'muted small' }, p.when) : null),
+        h('span', { class: 'tag' + (p.status === 'paid' ? ' ok' : '') }, p.status === 'paid' ? 'Paid' : (i === nextI ? 'Due' : 'Later')))))),
+      section('Invoices & receipts', files.length
+        ? h('div', { class: 'list-card' }, files.map(f => h('a', { class: 'list-item', href: f.href },
+            h('span', { class: 'list-icon' }, svg(ICON.doc)),
+            h('span', { class: 'day-text' }, h('span', { class: 'day-title' }, f.name), f.when ? h('span', { class: 'muted small' }, f.when) : null),
+            h('span', { class: 'chev' }, svg(ICON.chev)))))
+        : h('p', { class: 'muted' }, 'Your invoice and a receipt for each payment appear here.'))),
+    nav(t.id, 'pay'));
+}
+
+const DOC_ICON = { ticket: 'plane', voucher: 'ticket', hotel: 'bed', doc: 'doc' };
+function docsList(t, base) {
+  const docs = Array.isArray(t.documents) ? t.documents : [];
+  return docs.map((d, i) => (d.sample || safeLink(d.url || '')) ? h('a', { class: 'list-item', href: base + '/doc/' + i },
+    h('span', { class: 'list-icon' }, svg(ICON[DOC_ICON[d.kind] || 'doc'])),
+    h('span', { class: 'day-text' },
+      h('span', { class: 'day-title' }, d.name || 'Document'),
+      h('span', { class: 'muted small offline' }, svg(ICON.download), 'Saved for offline')),
+    h('span', { class: 'chev' }, svg(ICON.chev))) : null).filter(Boolean);
+}
+
+// Keeps a copy of each document on the phone so it opens without signal abroad.
+function saveOffline(urls) {
+  if (!('caches' in window) || !urls.length) return;
+  caches.open('elt-docs').then(c => urls.forEach(u => c.match(u).then(m => m || c.add(u).catch(() => {})))).catch(() => {});
+}
+async function openDoc(url) {
+  try {
+    if ('caches' in window && !navigator.onLine) {
+      const m = await (await caches.open('elt-docs')).match(url);
+      if (m) { window.open(URL.createObjectURL(await m.blob()), '_blank'); return; }
+    }
+  } catch (e) {}
+  openInApp(url);
+}
+
+function qrBox() {
+  // A stand-in pattern for the preview; real vouchers show the supplier's own QR code.
+  let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  const cells = [];
+  for (let y = 0; y < 21; y++) for (let x = 0; x < 21; x++) {
+    const fin = (a, b) => x >= a && x < a + 7 && y >= b && y < b + 7;
+    let on;
+    if (fin(0, 0) || fin(14, 0) || fin(0, 14)) {
+      const ox = x < 7 ? 0 : 14, oy = y < 7 ? 0 : 14, dx = x - ox, dy = y - oy;
+      on = dx === 0 || dy === 0 || dx === 6 || dy === 6 || (dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4);
+    } else on = rnd() > 0.52;
+    cells.push(h('i', { class: on ? 'on' : null }));
+  }
+  return h('div', { class: 'qr', role: 'img', 'aria-label': 'QR code' }, ...cells);
+}
+function docPage(s) {
+  return h('div', { class: 'docpage' },
+    h('div', { class: 'doc-top' }, h('img', { src: img('mark-gold'), alt: '' }), h('span', {}, BRAND.name)),
+    h('h2', {}, s.heading),
+    h('dl', {}, ...s.rows.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])),
+    s.qr ? qrBox() : null,
+    s.foot ? h('p', { class: 'doc-foot' }, s.foot) : null,
+    h('span', { class: 'doc-mark' }, 'Sample'));
+}
+function viewDoc(t, d, back, tab) {
+  if (!d) { location.hash = back; return; }
+  const url = safeLink(d.url || '');
+  const s = d.sample;
+  const status = statusLine();
+  const share = async () => {
+    if (url && navigator.share) { try { await navigator.share({ title: d.name || 'Document', url }); } catch (e) {} return; }
+    if (url) { openDoc(url); return; }
+    setStatus(status, 'In the live app this opens your phone’s share menu, so you can save the PDF to Files or send it.');
+  };
+  render(
+    h('main', { class: 'main' },
+      h('a', { class: 'back-link', href: back }, svg(ICON.back), 'Back'),
+      h('h1', { style: 'margin-top:6px;font-size:32px' }, d.name || 'Document'),
+      h('p', { class: 'muted small offline', style: 'margin-top:8px' }, svg(ICON.download), 'Saved on this phone. Opens without internet.'),
+      s ? docPage(s) : null,
+      h('div', { class: 'stack', style: 'margin-top:20px' },
+        url ? h('button', { class: 'btn', type: 'button', onclick: () => openDoc(url) }, svg(ICON.doc), 'Open PDF') : null,
+        h('button', { class: url ? 'btn ghost' : 'btn ghost', type: 'button', onclick: share }, svg(ICON.share), 'Share or save'),
+        status)),
+    nav(t.id, tab));
+}
+
+// Every screen inside one trip (the sample trip uses the same screens).
+function tripRoute(t, parts) {
+  navTrip = t.id;
+  const base = '#/trip/' + encodeURIComponent(t.id);
+  const n = parseInt(parts[3], 10);
+  const pays = Array.isArray(t.payments) ? t.payments : [];
+  if (parts[2] === 'day') return viewDay(t, n || 1);
   if (parts[2] === 'info') return viewInfo(t);
-  if (parts[2] === 'pay') return viewPay(t);
+  if (parts[2] === 'pay') return viewPay(t, parts[3] === 'paid');
+  if (parts[2] === 'doc') return viewDoc(t, (t.documents || [])[n], base + '/info', 'info');
+  if (parts[2] === 'receipt') { const p = pays[n]; return viewDoc(t, p && { name: p.label + ' receipt', sample: p.receipt, url: p.receipt_url }, base + '/pay', 'pay'); }
+  if (parts[2] === 'invoice') return viewDoc(t, (t.invoices || [])[n], base + '/pay', 'pay');
   if (parts[2] === 'contact') return viewContact(t);
   if (parts[2] === 'plan') return viewPlan(t);
+  if (parts[2] === 'review') return viewReview(t);
   return viewTrip(t);
 }
+
+// ---------- Router ----------
+let tripsCache = null;
+let pastTrips = [];
+let tripsLoading = null;
+function sampleRoute(parts) {
+  return tripRoute(sampleTrip(), parts);
+}
+// The tabs shown when there is no current trip (also used when exploring without an account).
+function bookingRoute(parts) {
+  if (parts[0] === 'journey') return viewJourney(parts[1]);
+  if (parts[1] === 'sent') return viewRequestSent();
+  return viewRequest(parts[1]);
+}
+function homeTab(tab) {
+  navTrip = null;
+  if (tab === 'info' || tab === 'pay') { viewNoTripTab(tab); return true; }
+  if (tab === 'plan') { viewPlan(null); return true; }
+  if (tab === 'contact') { viewContact(null); return true; }
+  return false;
+}
+
 async function route() {
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
   viewingSample = parts[0] === 'trip' && parts[1] === 'sample';
@@ -958,38 +1368,47 @@ async function route() {
   const session = await getSession();
   if (!session) {
     tripsCache = null;
-    if (parts[0] === 'explore') return viewHome(true);
+    guestMode = ['explore', 'home', 'journey', 'request'].includes(parts[0]);
+    sessionEmail = ''; requestsCache = [];
+    if (parts[0] === 'explore') return viewNoTrip([], true);
+    if (parts[0] === 'home') return homeTab(parts[1]) || viewNoTrip([], true);
+    if (parts[0] === 'journey' || parts[0] === 'request') return bookingRoute(parts);
     viewSignIn(); return;
   }
+  guestMode = false;
+  sessionEmail = (session.user && session.user.email) || '';
   if (!tripsCache) {
-    if (!root.querySelector('.loader')) root.replaceChildren(loaderView('Loading your journey…'));
+    // The logo animation plays only right after signing in. Reopening the app goes straight in.
+    const intro = playIntro; playIntro = false;
+    if (intro) root.replaceChildren(loaderView('Loading your journey…'));
+    else if (!root.firstChild || root.querySelector('.boot')) root.replaceChildren(h('div', { class: 'boot' }));
     if (!tripsLoading) tripsLoading = (async () => {
       const t0 = Date.now();
-      const data = await myTrips();
+      const [data, reqs] = await Promise.all([myTrips(), myRequests().catch(() => [])]);
+      requestsCache = reqs || [];
       const wait = 2300 - (Date.now() - t0);  // let the plane finish drawing the logo once
-      if (wait > 0 && !calm()) await new Promise(r => setTimeout(r, wait));
+      if (intro && wait > 0 && !calm()) await new Promise(r => setTimeout(r, wait));
       tripsCache = data;
     })().finally(() => { tripsLoading = null; });
     try { await tripsLoading; }
     catch (e) { root.replaceChildren(h('div', { class: 'center' }, 'We couldn’t load your trip. Please check your connection.')); return; }
   }
   const trips = tripsCache || [];
+  const current = trips.filter(t => tripState(t) !== 'after');
+  pastTrips = trips.filter(t => tripState(t) === 'after');
   if (parts[0] === 'account' && parts[1] === 'delete') return viewDeleteAccount();
-  if (parts[0] === 'explore') return trips.length ? (location.hash = '#/') : viewHome(false);
+  if (parts[0] === 'explore') { location.hash = '#/'; return; }
+  if (parts[0] === 'home' && homeTab(parts[1])) return;
+  if (parts[0] === 'journey' || parts[0] === 'request') return bookingRoute(parts);
   if (parts[0] === 'trip') {
     const t = trips.find(x => String(x.id) === parts[1]);
     if (!t) { location.hash = '#/'; return; }
-    if (parts[2] === 'day') return viewDay(t, parseInt(parts[3], 10) || 1);
-    if (parts[2] === 'info') return viewInfo(t);
-    if (parts[2] === 'pay') return viewPay(t);
-    if (parts[2] === 'contact') return viewContact(t);
-    if (parts[2] === 'plan') return viewPlan(t);
-    if (parts[2] === 'review') return viewReview(t);
-    return viewTrip(t);
+    return tripRoute(t, parts);
   }
-  if (trips.length === 0) return viewHome(false);
-  if (trips.length === 1) return viewTrip(trips[0]);
-  return viewTrips(trips);
+  navTrip = null;
+  if (current.length === 0) return viewNoTrip(pastTrips, false);
+  if (current.length === 1) return viewTrip(current[0]);
+  return viewTrips(current);
 }
 
 window.addEventListener('hashchange', route);

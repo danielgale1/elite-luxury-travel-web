@@ -19,6 +19,8 @@ export const BRAND = {
   // Optional: your Google review link. Happy reviewers (4-5 stars) get a button to post there too.
   googleReviewUrl: '',
   planUrl: 'https://www.eliteluxurytravel.llc/plan-your-journey',
+  // "Book a call" opens the GHL booking calendar (same one as the website).
+  callUrl: 'https://api.leadconnectorhq.com/widget/booking/tdbMgkwILkEL7QOsfIbN',
   signinImage: 'https://images.unsplash.com/photo-1530476219733-88085e45aa2c?w=1200&q=80&auto=format&fit=crop'
 };
 

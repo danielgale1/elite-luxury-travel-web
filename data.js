@@ -26,10 +26,26 @@ const SAMPLE = [{
   dates_text: 'Sample dates: May 12 to 23, 2027',
   start_date: '2027-05-12',
   flights: [
-    { from: 'New York (JFK)', to: 'Rome (FCO)', flight: 'AZ 609', when: 'Tue, May 11 · departs 6:45 PM, lands 9:20 AM May 12' },
-    { from: 'Milan (MXP)', to: 'New York (JFK)', flight: 'AZ 604', when: 'Sun, May 23 · departs 1:10 PM, lands 3:55 PM' }
+    { from: 'New York (JFK)', to: 'Rome (FCO)', flight: 'AZ 609', when: 'Tue, May 11 · departs 6:45 PM, lands 9:20 AM May 12', ref: 'SAMPLE1' },
+    { from: 'Milan (MXP)', to: 'New York (JFK)', flight: 'AZ 604', when: 'Sun, May 23 · departs 1:10 PM, lands 3:55 PM', ref: 'SAMPLE1' }
   ],
-  documents: [],
+  // Tickets, vouchers and confirmations. Jordan uploads the PDFs on the admin page.
+  documents: [
+    { name: 'Flight e-tickets', kind: 'ticket', sample: { heading: 'Electronic ticket receipt', rows: [['Passengers', '2 adults'], ['Booking code', 'SAMPLE1'], ['Outbound', 'AZ 609 · New York (JFK) to Rome (FCO) · Tue, May 11'], ['Return', 'AZ 604 · Milan (MXP) to New York (JFK) · Sun, May 23'], ['Class', 'Business']], foot: 'Show your passport at check-in. Online check-in opens 24 hours before departure.' } },
+    { name: 'Vatican early entry tickets', kind: 'voucher', sample: { heading: 'Tour voucher', rows: [['Tour', 'Early entry: Vatican Museums & Sistine Chapel'], ['Date', 'Fri, May 14 · 7:30 AM'], ['Guests', '2'], ['Meeting point', 'Vatican Museums entrance']], qr: true, foot: 'Show this QR code to your guide on your phone. No need to print.' } },
+    { name: 'Train tickets: Rome, Florence, Venice, Milan', kind: 'voucher', sample: { heading: 'Rail tickets', rows: [['May 16', 'Roma Termini to Firenze S.M.N. · 10:20 AM'], ['May 19', 'Firenze S.M.N. to Venezia S. Lucia · 11:30 AM'], ['May 22', 'Venezia S. Lucia to Milano Centrale · 10:25 AM'], ['Class', 'First class, 2 travellers']], qr: true, foot: 'Show the QR code on board when asked.' } },
+    { name: 'Hotel confirmations', kind: 'hotel', sample: { heading: 'Hotel confirmations', rows: [['Rome', 'Singer Palace Hotel · May 12 to 16 · Conf. SAMPLE-4821'], ['Florence', 'The Place Firenze · May 16 to 19 · Conf. SAMPLE-7733'], ['Venice', 'Hotel Londra Palace · May 19 to 22 · Conf. SAMPLE-1904'], ['Milan', 'Park Hyatt Milan · May 22 to 23 · Conf. SAMPLE-5560']], foot: 'Your name is on every reservation. Just give your name at the front desk.' } },
+    { name: 'Travel insurance policy', kind: 'doc', sample: { heading: 'Travel insurance', rows: [['Covered', '2 travellers · May 11 to 23, 2027'], ['Policy', 'SAMPLE-POLICY']], foot: 'Keep this with you while you travel.' } }
+  ],
+  // Payment schedule. Each payment opens Fora's or Stripe's secure page; receipts are kept here.
+  price_total: '$24,800',
+  payments: [
+    { label: 'Deposit', amount: '$5,000', status: 'paid', when: 'Paid Nov 26, 2026', receipt: { heading: 'Payment receipt', rows: [['For', 'Italy Anniversary · deposit'], ['Amount', '$5,000.00'], ['Paid', 'Nov 26, 2026'], ['Method', 'Card, via secure checkout']], foot: 'Sample receipt for the preview.' } },
+    { label: 'Final balance', amount: '$19,800', status: 'due', when: 'Due Mar 1, 2027', pay_link: 'https://example.com/secure-checkout' }
+  ],
+  invoices: [
+    { name: 'Trip invoice', when: 'Nov 26, 2026', sample: { heading: 'Invoice', rows: [['Trip', 'Italy Anniversary · May 12 to 23, 2027'], ['Travellers', '2 adults'], ['Trip total', '$24,800.00'], ['Deposit paid', '$5,000.00 · Nov 26, 2026'], ['Balance due', '$19,800.00 by Mar 1, 2027']], foot: 'Sample invoice for the preview.' } }
+  ],
   cover_image: 'https://images.squarespace-cdn.com/content/6a3ead383af5dc37cc4928a6/75860ccc-dcf7-4ca9-b710-58485a5af1e4/Ys1jQraWs2CqD086mLRf1lZqlLkvJCdTGYLhYich7JA6sfV7Ku5YsYaG1YUbeoNANeE1MqLMgGX24ivaPHaMrFUBrSRCw4LPJO6iqMQT-YcMyIy751cE6llvhOtr0TJVBKbtAhIz1XfunvR9CYdrRknlh8DOybM_V2LqJRoqDJD4L9v2MVG7vxF5drzXFTSb.jpg?format=1500w',
   places: [
     { city: 'Rome', image: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=1200&q=80&auto=format&fit=crop' },
@@ -172,6 +188,43 @@ export async function signOut() {
   if (DEMO) return;
   const c = await sb();
   await c.auth.signOut();
+}
+
+// Hotel confirmation numbers for the sample trip.
+const CONF = { 'Singer Palace Hotel': 'SAMPLE-4821', 'The Place Firenze': 'SAMPLE-7733', 'Hotel Londra Palace': 'SAMPLE-1904', 'Park Hyatt Milan': 'SAMPLE-5560' };
+SAMPLE[0].days.forEach(d => { if (CONF[d.stay]) d.stay_conf = CONF[d.stay]; });
+
+// Trip requests sent from the app ("Request this journey" / "Plan a custom trip").
+// They go to Jordan, who replies with a proposal that appears in the app.
+export async function submitTripRequest(req) {
+  if (DEMO) { if (window.__P && window.__P.request) window.__P.request(req); return { ok: true }; }
+  const c = await sb();
+  const { data: { user } } = await c.auth.getUser();
+  const { error } = await c.from('trip_requests').insert({ ...req, user_id: user ? user.id : null });
+  return error ? { ok: false, message: error.message } : { ok: true };
+}
+export async function myRequests() {
+  if (DEMO) return (window.__P && window.__P.requests) ? window.__P.requests() : [];
+  const c = await sb();
+  const { data, error } = await c.from('trip_requests').select('*').eq('status', 'open').order('created_at', { ascending: false });
+  return error ? [] : (data || []);
+}
+// Marks a payment as made in the preview only. In the live app, Jordan (or the payment provider) confirms payments.
+export function demoPaid(tripId, index) { if (DEMO && window.__P && window.__P.pay) window.__P.pay(tripId, index); }
+
+// Admin: open requests, and closing one once a proposal is made.
+export async function allRequests() {
+  if (DEMO) return [];
+  const c = await sb();
+  const { data, error } = await c.from('trip_requests').select('*').eq('status', 'open').order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+export async function closeRequest(id) {
+  if (DEMO) return;
+  const c = await sb();
+  const { error } = await c.from('trip_requests').update({ status: 'closed' }).eq('id', id);
+  if (error) throw error;
 }
 
 // Trips visible to the signed-in client (row-level security filters them).

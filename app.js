@@ -1250,13 +1250,25 @@ function viewPay(t, justPaid) {
 }
 
 const DOC_ICON = { ticket: 'plane', voucher: 'ticket', hotel: 'bed', doc: 'doc' };
+const DOC_KIND = { ticket: 'Flight e-ticket', voucher: 'Voucher', hotel: 'Hotel confirmation', doc: 'Document' };
+// Shows "Saved for offline" only once a copy really is on the phone.
+function offlineLabel(d) {
+  const el = h('span', { class: 'muted small offline' }, DOC_KIND[d.kind] || 'Document');
+  const saved = () => el.replaceChildren(svg(ICON.download), 'Saved for offline');
+  if (d.sample) saved();
+  else if (safeLink(d.url || '') && 'caches' in window) isSaved(safeLink(d.url)).then(ok => { if (ok) saved(); });
+  return el;
+}
+async function isSaved(url) {
+  try { return !!(await (await caches.open('elt-docs')).match(url)); } catch (e) { return false; }
+}
 function docsList(t, base) {
   const docs = Array.isArray(t.documents) ? t.documents : [];
   return docs.map((d, i) => (d.sample || safeLink(d.url || '')) ? h('a', { class: 'list-item', href: base + '/doc/' + i },
     h('span', { class: 'list-icon' }, svg(ICON[DOC_ICON[d.kind] || 'doc'])),
     h('span', { class: 'day-text' },
       h('span', { class: 'day-title' }, d.name || 'Document'),
-      h('span', { class: 'muted small offline' }, svg(ICON.download), 'Saved for offline')),
+      offlineLabel(d)),
     h('span', { class: 'chev' }, svg(ICON.chev))) : null).filter(Boolean);
 }
 
@@ -1313,7 +1325,7 @@ function viewDoc(t, d, back, tab) {
     h('main', { class: 'main' },
       h('a', { class: 'back-link', href: back }, svg(ICON.back), 'Back'),
       h('h1', { style: 'margin-top:6px;font-size:32px' }, d.name || 'Document'),
-      h('p', { class: 'muted small offline', style: 'margin-top:8px' }, svg(ICON.download), 'Saved on this phone. Opens without internet.'),
+      d.sample ? h('p', { class: 'muted small offline', style: 'margin-top:8px' }, svg(ICON.download), 'Saved on this phone. Opens without internet.') : null,
       s ? docPage(s) : null,
       h('div', { class: 'stack', style: 'margin-top:20px' },
         url ? h('button', { class: 'btn', type: 'button', onclick: () => openDoc(url) }, svg(ICON.doc), 'Open PDF') : null,

@@ -475,3 +475,21 @@ input,textarea,select{font-size:17px;border-color:#c9c2b5}
 .account-links a { color: var(--muted, #7a7a7a); text-decoration: underline; text-underline-offset: 3px; }
 .btn.danger { background: #a3302a; border-color: #a3302a; color: #fff; }
 .btn.danger:disabled { opacity: .6; }
+
+/* Home without a trip, guest explore, sample trip */
+.home-mark{display:block;width:58px;height:auto;margin:4px 0 18px}
+.home-status{display:flex;gap:14px;align-items:flex-start;margin-top:20px;padding:16px 18px;border:1px solid var(--line);border-radius:18px;background:var(--soft)}
+.home-status svg{width:22px;height:22px;flex-shrink:0;color:var(--gold-ink);margin-top:2px}
+.home-status > span{display:flex;flex-direction:column;gap:4px;font-size:14.5px;line-height:1.55;color:#3f3f3f}
+.home-status strong{font-size:15px;color:var(--ink)}
+.sample-card{position:relative;display:block;height:230px;margin-top:22px;border-radius:20px;overflow:hidden;text-decoration:none;color:#fff;background:#141414;box-shadow:var(--shadow);transition:transform .18s ease,box-shadow .18s ease}
+.sample-card:active{transform:scale(.985)}
+.sample-card .shade{background:linear-gradient(180deg,rgba(0,0,0,.05) 25%,rgba(0,0,0,.82) 100%)}
+.sample-card-text{position:absolute;left:18px;right:18px;bottom:16px;display:flex;flex-direction:column;gap:5px;text-shadow:0 1px 10px rgba(0,0,0,.45)}
+.sample-card-text > span:first-child{font-size:12px;letter-spacing:2px;text-transform:uppercase;font-weight:600;color:#f3dfaa}
+.sample-card-text strong{font-family:var(--serif);font-size:30px;font-weight:500;line-height:1.05}
+.sample-go{display:inline-flex;align-items:center;gap:4px;margin-top:4px;font-size:13px;font-weight:600}
+.sample-go svg{width:16px;height:16px}
+.sample-banner{position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;padding-top:max(10px,env(safe-area-inset-top));background:#141414;color:#fff;font-size:13px}
+.sample-banner strong{color:#f3dfaa;font-weight:600}
+.sample-banner a{flex-shrink:0;padding:6px 14px;border:1px solid rgba(243,223,170,.6);border-radius:999px;color:#f3dfaa;text-decoration:none;font-weight:600;font-size:12.5px}

@@ -57,6 +57,11 @@ const SAMPLE = [{
   ]
 }];
 
+// The sample trip shown to everyone as "See how your trip will look".
+export function sampleTrip() {
+  return { ...JSON.parse(JSON.stringify(SAMPLE[0])), id: 'sample', client_name: '', client_email: '', sample: true };
+}
+
 const CACHE_KEY = 'elt_trips_cache';
 function cacheSet(v) { try { localStorage.setItem(CACHE_KEY, JSON.stringify(v)); } catch (e) {} }
 function cacheGet() { try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); } catch (e) { return null; } }

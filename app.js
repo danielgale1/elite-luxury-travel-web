@@ -1,6 +1,6 @@
 import { BRAND, JOURNEYS } from './config.js';
 import { wxIcon, wxKind } from './wxicons.js';
-import { DEMO, getSession, sendCode, verifyCode, signOut, myTrips, safeLink, sb, myReview, submitReview, signInPassword, signUpPassword, verifySignupCode, resendSignupCode, sendResetCode, setNewPassword, deleteAccount } from './data.js';
+import { DEMO, getSession, sendCode, verifyCode, signOut, myTrips, safeLink, sb, myReview, submitReview, signInPassword, signUpPassword, verifySignupCode, resendSignupCode, sendResetCode, setNewPassword, deleteAccount, sampleTrip } from './data.js';
 
 const root = document.getElementById('app');
 // Image paths (the single-file preview swaps in embedded copies).
@@ -99,8 +99,15 @@ function loaderView(text) {
 
 const calm = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+// Shown above every screen of the sample trip.
+let viewingSample = false;
+function sampleBanner() {
+  return h('div', { class: 'sample-banner' },
+    h('span', {}, h('strong', {}, 'Sample trip'), ' · This is how your itinerary will look.'),
+    h('a', { href: '#/explore' }, 'Close'));
+}
 function render(...nodes) {
-  root.replaceChildren(...(DEMO ? [demoBanner()] : []), ...nodes);
+  root.replaceChildren(...(DEMO ? [demoBanner()] : []), ...(viewingSample ? [sampleBanner()] : []), ...nodes);
   window.scrollTo(0, 0);
   animateIn(root);
 }
@@ -287,7 +294,8 @@ function viewSignIn(msg, presetEmail) {
     form,
     h('button', { class: 'link-btn', type: 'button', onclick: () => viewForgot(email.el.value.trim()) }, 'Forgot password?'),
     h('div', { class: 'auth-switch' }, h('span', {}, 'New here?'),
-      h('button', { class: 'btn ghost', type: 'button', onclick: () => viewSignUp(email.el.value.trim()) }, 'Create your account')));
+      h('button', { class: 'btn ghost', type: 'button', onclick: () => viewSignUp(email.el.value.trim()) }, 'Create your account'),
+      h('a', { class: 'link-btn', href: '#/explore' }, 'Explore first, no account needed')));
 }
 
 function viewSignUp(presetEmail) {
@@ -506,6 +514,14 @@ function journeyLink(slug) {
   return slug ? base + (base.includes('?') ? '&' : '?') + 'journey=' + encodeURIComponent(slug) : base;
 }
 
+function journeysGrid() {
+  return h('div', { class: 'journeys' }, JOURNEYS.map(j =>
+    h('a', { class: 'journey', href: safeLink(j.url) || journeyLink('') || '#', target: '_blank', rel: 'noopener noreferrer' },
+      photo(j.image, j.title, 'fill'),
+      h('div', { class: 'shade' }),
+      h('span', { class: 'journey-text' }, h('span', {}, j.meta), h('strong', {}, j.title)))));
+}
+
 function viewPlan(t) {
   const plan = journeyLink('');
   render(
@@ -515,11 +531,7 @@ function viewPlan(t) {
       h('p', { class: 'muted', style: 'margin-top:12px' }, 'Pick one of our curated journeys or tell us about a trip of your own. Your advisor takes it from there.'),
       plan ? h('a', { class: 'btn', style: 'margin-top:24px', href: plan, target: '_blank', rel: 'noopener noreferrer' }, svg(ICON.compass), 'Plan a custom trip') : null,
       h('h2', { class: 'section-title', style: 'margin-top:34px' }, 'Curated journeys'),
-      h('div', { class: 'journeys' }, JOURNEYS.map(j =>
-        h('a', { class: 'journey', href: journeyLink(j.slug) || '#', target: '_blank', rel: 'noopener noreferrer' },
-          photo(j.image, j.title, 'fill'),
-          h('div', { class: 'shade' }),
-          h('span', { class: 'journey-text' }, h('span', {}, j.meta), h('strong', {}, j.title)))))),
+      journeysGrid()),
     nav(t.id, 'plan'));
 }
 
@@ -709,13 +721,47 @@ function viewTrips(trips) {
     accountFooter(40)));
 }
 
-function viewEmpty() {
+function contactButtons(subject) {
+  const phone = (BRAND.phone || '').replace(/[^\d+]/g, '');
+  const wa = (BRAND.whatsapp || '').replace(/\D/g, '');
+  return h('div', { class: 'stack' },
+    wa ? h('a', { class: 'btn', href: 'https://wa.me/' + wa, target: '_blank', rel: 'noopener noreferrer' }, svg(ICON.chat), 'WhatsApp us') : null,
+    phone ? h('a', { class: wa ? 'btn ghost' : 'btn', href: 'tel:' + phone }, svg(ICON.phone), 'Call ' + (BRAND.advisor ? BRAND.advisor.split(' ')[0] : 'us')) : null,
+    h('a', { class: (wa || phone) ? 'btn ghost' : 'btn', href: 'mailto:' + BRAND.email + '?subject=' + encodeURIComponent(subject || 'Planning a trip') }, svg(ICON.mail), 'Email us'));
+}
+
+// Home for anyone without a trip yet: signed-in clients waiting for their itinerary, and guests exploring.
+function viewHome(guest) {
+  const plan = journeyLink('');
   render(h('main', { class: 'main' },
-    h('h1', {}, 'Your trip is on its way'),
-    h('p', { class: 'muted', style: 'margin-top:14px' }, 'We’re still putting your itinerary together. You’ll see it here as soon as it’s ready.'),
-    h('div', { class: 'stack', style: 'margin-top:28px' },
-      h('a', { class: 'btn', href: 'mailto:' + BRAND.email }, 'Email us')),
-    accountFooter(16)));
+    h('img', { class: 'home-mark', src: img('mark-gold'), alt: BRAND.name }),
+    h('p', { class: 'eyebrow' }, guest ? BRAND.name : 'Welcome'),
+    h('h1', { style: 'margin-top:10px' }, guest ? 'Travel, beautifully arranged.' : 'Your journey starts here.'),
+    guest
+      ? h('p', { class: 'muted', style: 'margin-top:12px' }, 'Private journeys planned around you. Explore our curated journeys, see how your trip looks in the app, or talk to an advisor.')
+      : h('div', { class: 'home-status' },
+          svg(ICON.clock),
+          h('span', {}, h('strong', {}, 'Waiting for your itinerary?'), h('span', {}, 'When your advisor finishes your trip, it appears right here. Until then, have a look around.'))),
+    h('a', { class: 'sample-card', href: '#/trip/sample' },
+      photo(JOURNEYS[0] && JOURNEYS[0].image, 'Sample trip', 'fill'),
+      h('div', { class: 'shade' }),
+      h('span', { class: 'sample-card-text' },
+        h('span', {}, 'Sample trip · Italy'),
+        h('strong', {}, 'See how your trip will look'),
+        h('span', { class: 'sample-go' }, 'Open the sample', svg(ICON.chev)))),
+    h('h2', { class: 'section-title', style: 'margin-top:34px' }, 'Curated journeys'),
+    journeysGrid(),
+    plan ? h('a', { class: 'btn', style: 'margin-top:20px', href: plan, target: '_blank', rel: 'noopener noreferrer' }, svg(ICON.compass), 'Plan a custom trip') : null,
+    h('h2', { class: 'section-title', style: 'margin-top:36px' }, 'Talk to an advisor'),
+    BRAND.advisor ? h('div', { class: 'advisor', style: 'margin:0 0 16px' },
+      h('span', { class: 'advisor-mark' }, h('img', { src: img('mark-gold'), alt: '' })),
+      h('span', { class: 'day-text' }, h('span', { class: 'muted', style: 'font-size:12px' }, 'Your travel advisor'), h('span', { class: 'day-title' }, BRAND.advisor), h('span', { class: 'muted', style: 'font-size:13px' }, BRAND.name))) : null,
+    contactButtons(),
+    guest
+      ? h('div', { class: 'account-foot', style: 'margin-top:40px' },
+          h('a', { class: 'btn ghost', href: '#/' }, 'Sign in or create your account'),
+          h('div', { class: 'account-links' }, BRAND.privacyUrl ? h('a', { href: BRAND.privacyUrl, target: '_blank', rel: 'noopener noreferrer' }, 'Privacy policy') : null))
+      : accountFooter(40)));
 }
 
 // ---------- Travel info: flights, documents, weather ----------
@@ -856,6 +902,7 @@ function viewContact(t) {
 
 // Sign out, privacy policy and delete account: shown at the bottom of the main screens.
 function accountFooter(top = 40) {
+  if (viewingSample) return null;
   return h('div', { class: 'account-foot', style: 'margin-top:' + top + 'px' },
     h('button', { class: 'btn ghost', type: 'button', onclick: doSignOut }, 'Sign out'),
     h('div', { class: 'account-links' },
@@ -895,9 +942,25 @@ async function doSignOut() {
 // ---------- Router ----------
 let tripsCache = null;
 let tripsLoading = null;
+function sampleRoute(parts) {
+  const t = sampleTrip();
+  if (parts[2] === 'day') return viewDay(t, parseInt(parts[3], 10) || 1);
+  if (parts[2] === 'info') return viewInfo(t);
+  if (parts[2] === 'pay') return viewPay(t);
+  if (parts[2] === 'contact') return viewContact(t);
+  if (parts[2] === 'plan') return viewPlan(t);
+  return viewTrip(t);
+}
 async function route() {
+  const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
+  viewingSample = parts[0] === 'trip' && parts[1] === 'sample';
+  if (viewingSample) return sampleRoute(parts);
   const session = await getSession();
-  if (!session) { tripsCache = null; viewSignIn(); return; }
+  if (!session) {
+    tripsCache = null;
+    if (parts[0] === 'explore') return viewHome(true);
+    viewSignIn(); return;
+  }
   if (!tripsCache) {
     if (!root.querySelector('.loader')) root.replaceChildren(loaderView('Loading your journey…'));
     if (!tripsLoading) tripsLoading = (async () => {
@@ -911,8 +974,8 @@ async function route() {
     catch (e) { root.replaceChildren(h('div', { class: 'center' }, 'We couldn’t load your trip. Please check your connection.')); return; }
   }
   const trips = tripsCache || [];
-  const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
   if (parts[0] === 'account' && parts[1] === 'delete') return viewDeleteAccount();
+  if (parts[0] === 'explore') return trips.length ? (location.hash = '#/') : viewHome(false);
   if (parts[0] === 'trip') {
     const t = trips.find(x => String(x.id) === parts[1]);
     if (!t) { location.hash = '#/'; return; }
@@ -924,7 +987,7 @@ async function route() {
     if (parts[2] === 'review') return viewReview(t);
     return viewTrip(t);
   }
-  if (trips.length === 0) return viewEmpty();
+  if (trips.length === 0) return viewHome(false);
   if (trips.length === 1) return viewTrip(trips[0]);
   return viewTrips(trips);
 }
